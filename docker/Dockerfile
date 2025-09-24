@@ -51,28 +51,37 @@ RUN ln -s /usr/bin/python3 /usr/bin/python
 # install pytorch before cache bust to avoid redownloading pytorch
 RUN pip install --pre --no-cache-dir torch torchvision torchaudio --index-url https://download.pytorch.org/whl/nightly/cu128
 
-# Fix cache busting by moving CACHEBUST to right before git clone
-ARG CACHEBUST=1234
-ARG GIT_COMMIT=main
-RUN echo "Cache bust: ${CACHEBUST}" && \
-    git clone https://github.com/ostris/ai-toolkit.git && \
-    cd ai-toolkit && \
-    git checkout ${GIT_COMMIT}
-
 WORKDIR /app/ai-toolkit
+
+ARG CACHEBUST=1234
+ARG GIT_COMMIT=local
+RUN echo "Cache bust: ${CACHEBUST}"
+LABEL org.opencontainers.image.revision="${GIT_COMMIT}"
+
+# Copy dependency manifests first to leverage Docker layer caching
+COPY requirements.txt ./
 
 # Install Python dependencies
 RUN pip install --no-cache-dir -r requirements.txt && \
     pip install --pre --no-cache-dir torch torchvision torchaudio --index-url https://download.pytorch.org/whl/nightly/cu128 --force && \
     pip install setuptools==69.5.1 --no-cache-dir
 
-# Build UI
+# Pre-seed UI dependencies before copying the full source
+COPY ui/package.json ui/package-lock.json ./ui/
+
 WORKDIR /app/ai-toolkit/ui
-RUN npm install && \
-    npm run build && \
+RUN npm install
+
+WORKDIR /app/ai-toolkit
+
+# Copy the remainder of the application source from the local build context
+COPY . .
+
+WORKDIR /app/ai-toolkit/ui
+RUN npm run build && \
     npm run update_db
 
-# Expose port (assuming the application runs on port 3000)
+# Expose port (assuming the application runs on port 8675)
 EXPOSE 8675
 
 WORKDIR /
