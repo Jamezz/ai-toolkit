@@ -665,7 +665,7 @@ class BaseSDTrainProcess(BaseTrainProcess):
             with open(path_to_save, 'w') as f:
                 json.dump(json_data, f, indent=4)
         
-        print_acc(f"Saved checkpoint to {file_path}")
+        print_acc(f"Saved checkpoint to {file_path}", os.path.exists(file_path))
 
         # save optimizer
         if self.optimizer is not None:
@@ -677,7 +677,7 @@ class BaseSDTrainProcess(BaseTrainProcess):
                 except Exception as e:
                     state_dict = self.optimizer.state_dict()
                 torch.save(state_dict, file_path)
-                print_acc(f"Saved optimizer to {file_path}")
+                print_acc(f"Saved optimizer to {file_path}", os.path.exists(file_path))
             except Exception as e:
                 print_acc(e)
                 print_acc("Could not save optimizer")
