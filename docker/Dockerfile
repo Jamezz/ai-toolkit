@@ -74,8 +74,21 @@ RUN npm install
 
 WORKDIR /app/ai-toolkit
 
-# Copy the remainder of the application source from the local build context
-COPY . .
+# Copy source directories (bind-mounted data dirs like config/output are skipped)
+COPY assets ./assets
+COPY extensions ./extensions
+COPY extensions_built_in ./extensions_built_in
+COPY jobs ./jobs
+COPY notebooks ./notebooks
+COPY scripts ./scripts
+COPY testing ./testing
+COPY toolkit ./toolkit
+
+# Copy project entrypoints and supporting files
+COPY run.py run_modal.py flux_train_ui.py info.py version.py ./
+
+# Copy UI application sources after installing dependencies
+COPY ui ./ui
 
 WORKDIR /app/ai-toolkit/ui
 RUN npm run build && \
