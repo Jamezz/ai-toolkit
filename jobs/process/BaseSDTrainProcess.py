@@ -251,6 +251,10 @@ class BaseSDTrainProcess(BaseTrainProcess):
         self.named_lora = False
         if self.embed_config is not None or is_training_adapter:
             self.named_lora = True
+        if self.network_config is not None:
+            net_type = getattr(self.network_config, 'type', '')
+            if isinstance(net_type, str) and net_type.lower() == 'lokr':
+                self.named_lora = True
         self.snr_gos: Union[LearnableSNRGamma, None] = None
         self.ema: ExponentialMovingAverage = None
         
@@ -2420,6 +2424,7 @@ class BaseSDTrainProcess(BaseTrainProcess):
                         }
                     )
         dtype = "torch.bfloat16" if self.model_config.is_flux else "torch.float16"
+        weight_filename = f"{self.job.name}_LoRA.safetensors" if self.named_lora else f"{self.job.name}.safetensors"
         # Construct the README content
         readme_content = f"""---
 tags:
@@ -2454,7 +2459,7 @@ from diffusers import AutoPipelineForText2Image
 import torch
 
 pipeline = AutoPipelineForText2Image.from_pretrained('{base_model}', torch_dtype={dtype}).to('cuda')
-pipeline.load_lora_weights('{repo_id}', weight_name='{self.job.name}.safetensors')
+pipeline.load_lora_weights('{repo_id}', weight_name='{weight_filename}')
 image = pipeline('{instance_prompt if not widgets else self.sample_config.prompts[0]}').images[0]
 image.save("my_image.png")
 ```
