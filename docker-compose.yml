@@ -1,21 +1,23 @@
-version: "3.8"
-
+version: "3.9"
 services:
   ai-toolkit:
-    image: ostris/aitoolkit:latest
-    restart: unless-stopped
+    # If a prebuilt image isn't available to you, build from the repo's Dockerfile instead.
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    restart: "unless-stopped"
+    shm_size: "32gb"
     ports:
-      - "8675:8675"
+      - "8675:8675"         # Web UI
+    environment:
+      - HF_TOKEN=${HF_TOKEN}                          # Hugging Face token (accept Wan2.2 licenses first)
+      - TZ=UTC
     volumes:
-      - ~/.cache/huggingface/hub:/root/.cache/huggingface/hub
-      - ./aitk_db.db:/app/ai-toolkit/aitk_db.db
-      - ./datasets:/app/ai-toolkit/datasets
+      - /comfy/datasets/train:/app/ai-toolkit/datasets
       - ./output:/app/ai-toolkit/output
       - ./config:/app/ai-toolkit/config
-    environment:
-      - AI_TOOLKIT_AUTH=${AI_TOOLKIT_AUTH:-password}
-      - NODE_ENV=production
-      - TZ=UTC
+      - ./hf_cache:/root/.cache/huggingface/hub
+    # Newer Docker Compose supports this directly:
     deploy:
       resources:
         reservations:
@@ -23,3 +25,4 @@ services:
             - driver: nvidia
               count: all
               capabilities: [gpu]
+    # If not using Swarm, you can alternatively add: gpus: all
