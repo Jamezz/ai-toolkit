@@ -91,8 +91,8 @@ COPY run.py run_modal.py flux_train_ui.py info.py version.py ./
 COPY ui ./ui
 
 WORKDIR /app/ai-toolkit/ui
-RUN npm run build && \
-    npm run update_db
+RUN npm run update_db && \
+    npm run build
 
 # Expose port (assuming the application runs on port 8675)
 EXPOSE 8675
