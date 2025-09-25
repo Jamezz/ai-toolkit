@@ -525,6 +525,7 @@ class BaseSDTrainProcess(BaseTrainProcess):
         # prepare meta
         save_meta = get_meta_for_safetensors(save_meta, self.job.name)
         if not self.is_fine_tuning:
+            print_acc(self)
             if self.network is not None:
                 lora_name = self.job.name
                 if self.named_lora:
