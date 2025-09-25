@@ -513,6 +513,7 @@ class BaseSDTrainProcess(BaseTrainProcess):
         self.update_training_metadata()
         filename = f'{self.job.name}{step_num}.safetensors'
         file_path = os.path.join(self.save_root, filename)
+        primary_checkpoint_path = None
 
         save_meta = copy.deepcopy(self.meta)
         # get extra meta
@@ -545,6 +546,7 @@ class BaseSDTrainProcess(BaseTrainProcess):
                     metadata=save_meta,
                     extra_state_dict=embedding_dict
                 )
+                primary_checkpoint_path = file_path
                 self.network.multiplier = prev_multiplier
                 # if we have an embedding as well, pair it with the network
 
@@ -653,6 +655,7 @@ class BaseSDTrainProcess(BaseTrainProcess):
                     save_meta,
                     get_torch_dtype(self.save_config.dtype)
                 )
+                primary_checkpoint_path = file_path
 
         # save learnable params as json if we have thim
         if self.snr_gos:
@@ -666,7 +669,9 @@ class BaseSDTrainProcess(BaseTrainProcess):
             with open(path_to_save, 'w') as f:
                 json.dump(json_data, f, indent=4)
         
-        print_acc(f"Saved checkpoint to {file_path}", os.path.exists(file_path))
+        checkpoint_display_path = primary_checkpoint_path or file_path
+        self.accelerator.wait_for_everyone()
+        print_acc(f"Saved checkpoint to {checkpoint_display_path}", os.path.exists(checkpoint_display_path))
 
         # save optimizer
         if self.optimizer is not None:
@@ -684,7 +689,7 @@ class BaseSDTrainProcess(BaseTrainProcess):
                 print_acc("Could not save optimizer")
 
         self.clean_up_saves()
-        self.post_save_hook(file_path)
+        self.post_save_hook(checkpoint_display_path)
 
         if self.ema is not None:
             self.ema.train()
