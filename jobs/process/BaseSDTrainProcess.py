@@ -547,6 +547,11 @@ class BaseSDTrainProcess(BaseTrainProcess):
                     extra_state_dict=embedding_dict
                 )
                 primary_checkpoint_path = file_path
+                if not os.path.exists(primary_checkpoint_path):
+                    base_name, ext = os.path.splitext(file_path)
+                    split_variants = sorted(glob.glob(f"{base_name}_*{ext}"))
+                    if split_variants:
+                        primary_checkpoint_path = split_variants[0]
                 self.network.multiplier = prev_multiplier
                 # if we have an embedding as well, pair it with the network
 

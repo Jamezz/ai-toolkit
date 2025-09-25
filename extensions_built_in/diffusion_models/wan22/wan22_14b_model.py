@@ -461,12 +461,15 @@ class Wan2214bModel(Wan21):
                 low_noise_lora[new_key] = state_dict[key]
 
         # loras have either LORA_MODEL_NAME_000005000.safetensors or LORA_MODEL_NAME.safetensors
+        wrote_any = False
+
         if len(high_noise_lora.keys()) > 0:
             # save the high noise LoRA
             high_noise_lora_path = output_path.replace(
                 ".safetensors", "_high_noise.safetensors"
             )
             save_file(high_noise_lora, high_noise_lora_path, metadata=metadata)
+            wrote_any = True
 
         if len(low_noise_lora.keys()) > 0:
             # save the low noise LoRA
@@ -474,6 +477,10 @@ class Wan2214bModel(Wan21):
                 ".safetensors", "_low_noise.safetensors"
             )
             save_file(low_noise_lora, low_noise_lora_path, metadata=metadata)
+            wrote_any = True
+
+        if not wrote_any:
+            save_file(state_dict, output_path, metadata=metadata)
 
     def load_lora(self, file: str):
         # if it doesnt have high_noise or low_noise, it is a combo LoRA
