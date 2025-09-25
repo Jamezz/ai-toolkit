@@ -497,12 +497,34 @@ class BaseSDTrainProcess(BaseTrainProcess):
         if not self.accelerator.is_main_process:
             return
         flush()
+        print_acc(f"[DEBUG] save() invoked: step_arg={step}, current_step={self.step_num}, save_root='{self.save_root}', is_fine_tuning={self.is_fine_tuning}")
+        try:
+            if os.path.exists(self.save_root):
+                existing_entries = sorted(os.listdir(self.save_root))
+                preview = existing_entries[:50]
+                print_acc(f"[DEBUG] save_root exists with {len(existing_entries)} entries (preview first {len(preview)}: {preview})")
+                if len(existing_entries) > len(preview):
+                    print_acc(f"[DEBUG] additional entries not shown: {len(existing_entries) - len(preview)}")
+            else:
+                print_acc(f"[DEBUG] save_root does not exist yet: {self.save_root}")
+        except Exception as e:
+            print_acc(f"[DEBUG] error inspecting save_root '{self.save_root}': {e}")
         if self.ema is not None:
             # always save params as ema
             self.ema.eval()
 
         if not os.path.exists(self.save_root):
             os.makedirs(self.save_root, exist_ok=True)
+            print_acc(f"[DEBUG] Created save_root directory: {self.save_root}")
+        print_acc(f"[DEBUG] save_root verified exists={os.path.exists(self.save_root)}")
+        try:
+            existing_after_mkdir = sorted(os.listdir(self.save_root))
+            preview_after_mkdir = existing_after_mkdir[:50]
+            print_acc(f"[DEBUG] save_root contents after ensure (first {len(preview_after_mkdir)}): {preview_after_mkdir}")
+            if len(existing_after_mkdir) > len(preview_after_mkdir):
+                print_acc(f"[DEBUG] additional entries not shown after ensure: {len(existing_after_mkdir) - len(preview_after_mkdir)}")
+        except Exception as e:
+            print_acc(f"[DEBUG] error listing save_root after ensure: {e}")
 
         step_num = ''
         if step is not None:
@@ -526,7 +548,6 @@ class BaseSDTrainProcess(BaseTrainProcess):
         # prepare meta
         save_meta = get_meta_for_safetensors(save_meta, self.job.name)
         if not self.is_fine_tuning:
-            print_acc(self)
             if self.network is not None:
                 lora_name = self.job.name
                 if self.named_lora:
@@ -540,19 +561,40 @@ class BaseSDTrainProcess(BaseTrainProcess):
 
                 # if we are doing embedding training as well, add that
                 embedding_dict = self.embedding.state_dict() if self.embedding else None
+                if embedding_dict is not None:
+                    print_acc(f"[DEBUG] embedding_dict entries: {len(embedding_dict)}")
+                print_acc(f"[DEBUG] Prepared network save: path={file_path}, exists_before={os.path.exists(file_path)}, has_embedding={self.embedding is not None}")
+                try:
+                    existing_before_save = sorted(os.listdir(self.save_root))
+                    preview_before_save = existing_before_save[:50]
+                    print_acc(f"[DEBUG] Directory snapshot before network.save_weights (first {len(preview_before_save)}): {preview_before_save}")
+                    if len(existing_before_save) > len(preview_before_save):
+                        print_acc(f"[DEBUG] additional entries omitted before save: {len(existing_before_save) - len(preview_before_save)}")
+                except Exception as e:
+                    print_acc(f"[DEBUG] error listing save_root before network.save_weights: {e}")
+                print_acc(f"[DEBUG] network_config.type={getattr(self.network_config, 'type', None)} named_lora={self.named_lora}")
                 self.network.save_weights(
                     file_path,
                     dtype=get_torch_dtype(self.save_config.dtype),
                     metadata=save_meta,
                     extra_state_dict=embedding_dict
                 )
+                exists_after_save = os.path.exists(file_path)
+                print_acc(f"[DEBUG] network.save_weights completed (exists_after={exists_after_save})")
                 primary_checkpoint_path = file_path
                 if not os.path.exists(primary_checkpoint_path):
                     base_name, ext = os.path.splitext(file_path)
                     split_variants = sorted(glob.glob(f"{base_name}_*{ext}"))
+                    print_acc(f"[DEBUG] variant search results for base {base_name}: {split_variants}")
                     if split_variants:
                         primary_checkpoint_path = split_variants[0]
+                        print_acc(f"[DEBUG] using fallback checkpoint path {primary_checkpoint_path}")
+                    else:
+                        print_acc(f"[DEBUG] no fallback variants found for {file_path}")
+                else:
+                    print_acc(f"[DEBUG] primary checkpoint exists at {primary_checkpoint_path}")
                 self.network.multiplier = prev_multiplier
+                print_acc(f"[DEBUG] network multiplier restored to {self.network.multiplier}")
                 # if we have an embedding as well, pair it with the network
 
             # even if added to lora, still save the trigger version
@@ -567,6 +609,7 @@ class BaseSDTrainProcess(BaseTrainProcess):
                     # replace extension
                     emb_file_path = os.path.splitext(emb_file_path)[0] + ".pt"
                 self.embedding.save(emb_file_path)
+                print_acc(f"[DEBUG] Embedding saved to {emb_file_path}, exists={os.path.exists(emb_file_path)}")
             
             if self.decorator is not None:
                 dec_filename = f'{self.job.name}{step_num}.safetensors'
@@ -580,6 +623,8 @@ class BaseSDTrainProcess(BaseTrainProcess):
                     dec_file_path,
                     metadata=save_meta,
                 )
+
+                print_acc(f"[DEBUG] Decorator saved to {dec_file_path}, exists={os.path.exists(dec_file_path)}")
 
             if self.adapter is not None and self.adapter_config.train:
                 adapter_name = self.job.name
@@ -655,11 +700,16 @@ class BaseSDTrainProcess(BaseTrainProcess):
                     get_torch_dtype(self.save_config.dtype)
                 )
             if self.train_config.train_unet or self.train_config.train_text_encoder:
+                print_acc(f"[DEBUG] About to save base model checkpoint to {file_path}")
                 self.sd.save(
                     file_path,
                     save_meta,
                     get_torch_dtype(self.save_config.dtype)
                 )
+                print_acc(f"[DEBUG] Base model save completed for {file_path}, exists={os.path.exists(file_path)}")
+                if primary_checkpoint_path is None:
+                    primary_checkpoint_path = file_path
+                    print_acc(f"[DEBUG] primary_checkpoint_path set from base model save: {primary_checkpoint_path}")
                 primary_checkpoint_path = file_path
 
         # save learnable params as json if we have thim
@@ -675,8 +725,17 @@ class BaseSDTrainProcess(BaseTrainProcess):
                 json.dump(json_data, f, indent=4)
         
         checkpoint_display_path = primary_checkpoint_path or file_path
+        print_acc(f"[DEBUG] Resolved checkpoint_display_path={checkpoint_display_path} (primary={primary_checkpoint_path})")
         self.accelerator.wait_for_everyone()
         print_acc(f"Saved checkpoint to {checkpoint_display_path}", os.path.exists(checkpoint_display_path))
+        try:
+            final_listing = sorted(os.listdir(self.save_root))
+            preview_final = final_listing[:50]
+            print_acc(f"[DEBUG] save_root contents after checkpoint (first {len(preview_final)}): {preview_final}")
+            if len(final_listing) > len(preview_final):
+                print_acc(f"[DEBUG] additional entries omitted after checkpoint: {len(final_listing) - len(preview_final)}")
+        except Exception as e:
+            print_acc(f"[DEBUG] error listing save_root after checkpoint: {e}")
 
         # save optimizer
         if self.optimizer is not None:
@@ -694,6 +753,14 @@ class BaseSDTrainProcess(BaseTrainProcess):
                 print_acc("Could not save optimizer")
 
         self.clean_up_saves()
+        try:
+            post_cleanup_listing = sorted(os.listdir(self.save_root))
+            preview_post_cleanup = post_cleanup_listing[:50]
+            print_acc(f"[DEBUG] save_root contents after clean_up_saves (first {len(preview_post_cleanup)}): {preview_post_cleanup}")
+            if len(post_cleanup_listing) > len(preview_post_cleanup):
+                print_acc(f"[DEBUG] additional entries omitted after cleanup: {len(post_cleanup_listing) - len(preview_post_cleanup)}")
+        except Exception as e:
+            print_acc(f"[DEBUG] error listing save_root after clean_up_saves: {e}")
         self.post_save_hook(checkpoint_display_path)
 
         if self.ema is not None:
